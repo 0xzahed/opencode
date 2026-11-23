@@ -297,7 +297,11 @@ const withSession = <A, E, R>(directory: string, body: (registry: Tool.Interface
   })
 
 // Runs a full Code Mode script as a job, as a session drain does, so the script's own timeout and background apply.
-const runScript = (registry: Tool.Interface, id: string, input: { code: string; timeout?: number; background?: boolean }) =>
+const runScript = (
+  registry: Tool.Interface,
+  id: string,
+  input: { code: string; timeout?: number; background?: boolean },
+) =>
   Effect.gen(function* () {
     const sessions = yield* Session.Service
     const jobs = yield* CodeModeJob.make(yield* Job.Service, sessions.synthetic, yield* Effect.scope)
@@ -307,6 +311,14 @@ const runScript = (registry: Tool.Interface, id: string, input: { code: string; 
       { services: yield* CodeModeTool.services },
     ).pipe(Effect.provideService(CodeModeJob.Current, jobs))
   })
+
+// A script can move to the background before its shell has started, so wait for the command to be running.
+const runningShell = (command: string) =>
+  Shell.Service.use((shell) => shell.list()).pipe(
+    Effect.map((list) => list.find((info) => info.command === command)),
+    Effect.repeat({ until: (info) => info !== undefined, schedule: Schedule.spaced("20 millis") }),
+    Effect.map((info) => info!),
+  )
 
 const withScanner = <A, E, R>(
   body: (registry: Tool.Interface, fixture: { active: string; outside: string }) => Effect.Effect<A, E, R>,
@@ -1109,9 +1121,7 @@ describe("ShellTool", () => {
           const jobID = String(result.metadata?.jobID)
           expect(result.output.output).toBe(`Script ${jobID} is still running; its result will arrive in this session.`)
           expect(timeouts).toEqual([0, 0])
-          const shell = yield* Shell.Service
-          const [running] = yield* shell.list()
-          expect(running?.command).toBe(progressOverflowCommand(6, "release"))
+          yield* runningShell(progressOverflowCommand(6, "release"))
           yield* Effect.promise(() => Bun.write(path.join(tmp.path, "release"), ""))
           // The shell finished inside the script, so the script's result holds its final output.
           const payload = (yield* Fiber.join(notice)).valueOrUndefined?.data.item.payload
@@ -1138,12 +1148,11 @@ describe("ShellTool", () => {
             const jobID = String(result.metadata?.jobID)
             expect(jobID).toStartWith("cm_")
             const shell = yield* Shell.Service
-            const [running] = yield* shell.list()
-            expect(running?.command).toBe(command)
+            const running = yield* runningShell(command)
             const jobs = yield* Job.Service
             if (target === "script") yield* jobs.cancel(jobID)
             else yield* jobs.cancelSession(sessionID)
-            expect((yield* shell.wait(running!.id)).status).toBe("killed")
+            expect((yield* shell.wait(running.id)).status).toBe("killed")
             expect(yield* shell.list()).toEqual([])
           }),
         )

@@ -17677,7 +17677,7 @@
               "opencode_api": {
                 "type": "boolean"
               },
-              "compaction_subagents": {
+              "compaction_jobs": {
                 "type": "boolean"
               },
               "sqlite_fts": {

@@ -75,7 +75,6 @@ export function PatchTool(props: ToolProps) {
                 <FileAccordionItem
                   open={disclosure.open()}
                   onOpenChange={disclosure.setOpen}
-                  pending={!disclosure.mounted()}
                   type={file().type}
                   header={
                     <div data-slot="apply-patch-trigger-content">
@@ -129,7 +128,6 @@ export function PatchTool(props: ToolProps) {
 function FileAccordionItem(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  pending?: boolean
   type?: string
   header: JSX.Element
   children: JSX.Element
@@ -169,7 +167,6 @@ function FileAccordionItem(props: {
           aria-labelledby={`${id}-trigger`}
           data-slot="accordion-content"
           data-expanded=""
-          data-disclosure-pending={props.pending ? "" : undefined}
         >
           {props.children}
         </div>

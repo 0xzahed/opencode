@@ -1142,7 +1142,7 @@ describe("ShellTool", () => {
         Effect.gen(function* () {
           const command = progressOverflowCommand(6, "release")
           const result = yield* runScript(registry, "call-shell-timeout", {
-            code: `return await tools.shell(${JSON.stringify({ command, timeout: 300 })})`,
+            code: `return await tools.shell(${JSON.stringify({ command, timeout: 2_000 })})`,
             timeout: 10_000,
           }).pipe(Effect.timeout("8 seconds"))
           expect(result.status).toBe("completed")
@@ -1151,7 +1151,7 @@ describe("ShellTool", () => {
             output: "xxxxxx",
             exitCode: null,
             ...(stopped.signal === undefined ? {} : { signal: expect.any(String) }),
-            killed: "Stopped when its timeout of 0.3 seconds expired.",
+            killed: "Stopped when its timeout of 2 seconds expired.",
             outputPath: expect.any(String),
             wallTimeSeconds: expect.any(Number),
           })

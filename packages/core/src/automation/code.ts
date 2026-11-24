@@ -2,7 +2,7 @@ export * as AutomationCode from "./code.js"
 
 import { CodeMode } from "@opencode/codemode"
 import { Automation } from "@opencode/schema/automation"
-import { Array, Effect, Option, Result, Schema } from "effect"
+import { Array, Context, Effect, Option, Result, Schema } from "effect"
 import { Agent } from "../agent.js"
 import { CodeModeTool } from "../codemode/tool.js"
 import { Permission } from "../permission.js"
@@ -84,6 +84,14 @@ function scanProgram(code: string): Result.Result<ProgramScan, string> {
 }
 
 /**
+ * Set for a create a plugin makes. It authorizes against what is loaded now instead of waiting for plugin activation,
+ * which may be running that plugin's setup and so would never finish.
+ */
+export const FromPlugin = Context.Reference<boolean>("@opencode/AutomationCode/FromPlugin", {
+  defaultValue: () => false,
+})
+
+/**
  * Runs in the creating Session's Location while the user is present: asks once for tool and extension permissions (and for
  * `execute` if none of those needed approval), without saving, so every run can be allowed unattended.
  */
@@ -95,7 +103,7 @@ export const authorize = Effect.fnUntraced(function* (
   invocation?: Invocation,
 ) {
   const scanned = yield* Effect.fromResult(scan(action.code))
-  yield* Plugin.awaitActivation
+  if (!(yield* FromPlugin)) yield* Plugin.awaitActivation
   const permission = yield* Permission.Service
   const agents = yield* Agent.Service
   const agent = yield* agents.select(session.agent)

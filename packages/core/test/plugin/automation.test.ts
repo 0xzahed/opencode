@@ -1,5 +1,7 @@
 import { expect } from "bun:test"
 import { Automation } from "@opencode/core/automation"
+import { Location } from "@opencode/core/location"
+import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { PluginPromise } from "@opencode/core/plugin/promise"
@@ -34,6 +36,60 @@ it.live("Effect plugins can create, list and delete automations", () =>
 
     yield* context.experimental.automation.delete({ automationID: created.id })
     expect((yield* automations.list()).map((item) => item.id)).not.toContain(created.id)
+  }),
+)
+
+it.live("a plugin can create a code automation while its Location activates", () =>
+  Effect.gen(function* () {
+    const automations = yield* Automation.Service
+    const location = yield* Location.Service
+    const locations = yield* LocationServiceMap.Service
+    const loaded: string[] = []
+
+    // Activate the Location's own plugins, the ones a create in that Location waits for.
+    yield* Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      yield* plugins.awaitActivation
+      yield* plugins.activate([
+        {
+          id: "test.automation.effect",
+          revision: "1",
+          effect: (ctx) =>
+            Effect.gen(function* () {
+              const session = yield* ctx.session.create({ title: "Effect code automation" })
+              yield* ctx.experimental.automation.create({
+                sessionID: session.id,
+                name: "effect code",
+                trigger: { type: "cron", cron: "0 * * * *" },
+                action: { type: "code", code: "return" },
+              })
+              loaded.push("effect")
+            }).pipe(Effect.orDie),
+        },
+        {
+          revision: "1",
+          ...PluginPromise.fromPromise({
+            id: "test.automation.promise",
+            async setup(ctx) {
+              const session = await ctx.session.create({ title: "Promise code automation" })
+              await ctx.experimental.automation.create({
+                sessionID: session.id,
+                name: "promise code",
+                trigger: { type: "cron", cron: "0 * * * *" },
+                action: { type: "code", code: "return" },
+              })
+              loaded.push("promise")
+            },
+          }),
+        },
+        { id: "test.automation.after", revision: "1", effect: () => Effect.sync(() => loaded.push("after")) },
+      ])
+    }).pipe(Effect.provide(locations.get(LocationServiceMap.canonical({ directory: location.directory }))))
+
+    expect(loaded).toEqual(["effect", "promise", "after"])
+    expect((yield* automations.list()).map((item) => item.name)).toEqual(
+      expect.arrayContaining(["effect code", "promise code"]),
+    )
   }),
 )
 
